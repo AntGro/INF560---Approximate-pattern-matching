@@ -284,27 +284,27 @@ int main(int argc, char **argv) {
         free(column);
     }
 
-    /*****
-    * END MAIN LOOP
-    ******/
-    if (rk == 0) {
-        n_matches = (int *) malloc(nb_patterns * sizeof(int));
-        MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_NEW);
-        /* Timer stop */
-        gettimeofday(&t2, NULL);
+        /*****
+        * END MAIN LOOP
+        ******/
+        if (rk == 0) {
+            n_matches = (int *) malloc(nb_patterns * sizeof(int));
+            MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_NEW);
+            /* Timer stop */
+            gettimeofday(&t2, NULL);
 
-        duration = (t2.tv_sec - t1.tv_sec) + ((t2.tv_usec - t1.tv_usec) / 1e6);
+            duration = (t2.tv_sec - t1.tv_sec) + ((t2.tv_usec - t1.tv_usec) / 1e6);
 
-        printf("APM done in %lf s\n", duration);
+            printf("APM done in %lf s\n", duration);
 
-        for (i = 0; i < nb_patterns; i++) {
-            printf("Number of matches for pattern <%s>: %d\n",
-                   pattern[i], n_matches[i]);
+            for (i = 0; i < nb_patterns; i++) {
+                printf("Number of matches for pattern <%s>: %d\n",
+                    pattern[i], n_matches[i]);
+            }
         }
-    }
-    else {
-        MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_NEW);
-    }
+        else {
+            MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_NEW);
+        }
     }
     
 
