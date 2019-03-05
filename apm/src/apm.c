@@ -285,7 +285,7 @@ double mpi_data_split(int argc, char **argv) {
             MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
         }
     }
-
+    MPI_Finalize();
     return duration;
 }
 
@@ -462,7 +462,7 @@ double mpi_omp_data_split(int argc, char **argv) {
 
 
     }
-
+    MPI_Finalize();
     return duration;
 }
 
@@ -697,17 +697,20 @@ double mpi_pattern_split ( int argc, char ** argv )
 
 int main( int argc, char ** argv ) {
 
-    duration_mpi_data_split = mpi_data_split(argc, argv);
+    double duration_mpi_data_split = mpi_data_split(argc, argv);
 
-    duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv);
+    //double duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv);
 
-    duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
+    //double duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
 
-    char* file = ".\\testsResults\\new"; /** A MODIFIER POUR INCLURE LES PARAMETRES DANS LE NOM (n, N, patterns, database) **/
-    File* fp = fopen(file, "w");
+    char* file = "testsResults/new.txt";
+
+    // A MODIFIER POUR INCLURE LES PARAMETRES DANS LE NOM (n, N, patterns, database)
+
+    FILE* fp = fopen(file, "w");
     fprintf(fp, "%f ", duration_mpi_data_split);
-    fprintf(fp, "%f ", duration_mpi_omp_data_split);
-    fprintf(fp, "%f", duration_mpi_pattern_split);
+    //fprintf(fp, "%f ", duration_mpi_omp_data_split);
+    //fprintf(fp, "%f", duration_mpi_pattern_split);
     fclose(fp);
 
 }
