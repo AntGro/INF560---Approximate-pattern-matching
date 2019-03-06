@@ -111,7 +111,7 @@ int levenshtein(char *s1, char *s2, int len, int * column) {
 }
 
 
-int mpi_data_split(int argc, char **argv) {
+double mpi_data_split(int argc, char **argv) {
     char **pattern;
     char *filename;
     int approx_factor = 0;
@@ -123,13 +123,12 @@ int mpi_data_split(int argc, char **argv) {
     int n_bytes;
     int *n_matches;
 
-    printf("%d\n", argc);
     /* Check number of arguments */
     if (argc < 4) {
         printf("Usage: %s approximation_factor "
                "dna_database pattern1 pattern2 ...\n",
                argv[0]);
-        return 1;
+        return 1.0;
     }
 
     MPI_Init(&argc, &argv);
@@ -153,7 +152,7 @@ int mpi_data_split(int argc, char **argv) {
         fprintf(stderr,
                 "Unable to allocate array of pattern of size %d\n",
                 nb_patterns);
-        return 1;
+        return 1.0;
     }
 
     /* len of the longest pattern */
@@ -167,13 +166,13 @@ int mpi_data_split(int argc, char **argv) {
         maxLen = max(maxLen, l);
         if (l <= 0) {
             fprintf(stderr, "Error while parsing argument %d\n", i + 3);
-            return 1;
+            return 1.0;
         }
 
         pattern[i] = (char *) malloc((l + 1) * sizeof(char));
         if (pattern[i] == NULL) {
             fprintf(stderr, "Unable to allocate string of size %d\n", l);
-            return 1;
+            return 1.0;
         }
 
         strncpy(pattern[i], argv[i + 3], (l + 1));
@@ -192,7 +191,7 @@ int mpi_data_split(int argc, char **argv) {
     buf = read_input_file(filename, &n_bytes);
     if (buf == NULL) {
         MPI_Abort(MPI_COMM_WORLD, 0);
-        return 1;
+        return 1.0;
     }
 
     int rkMax = min(n, n_bytes) - 1;
@@ -235,7 +234,7 @@ int mpi_data_split(int argc, char **argv) {
             if (column == NULL) {
                 fprintf(stderr, "Error: unable to allocate memory for column (%ldB)\n",
                         (size_pattern + 1) * sizeof(int));
-                return 1;
+                return 1.0;
             }
 
             /* Traverse the input data up to the end of the file */
@@ -286,29 +285,28 @@ int mpi_data_split(int argc, char **argv) {
             MPI_Reduce(n_matches_loc, n_matches, nb_patterns, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
         }
     }
-
-    return 0;
+    MPI_Finalize();
+    return duration;
 }
 
-int mpi_omp_data_split(int argc, char **argv) {
+double mpi_omp_data_split(int argc, char **argv) {
     char **pattern;
     char *filename;
     int approx_factor = 0;
     int nb_patterns = 0;
-    int i, j;
+    int i;
     char *buf;
     struct timeval t1, t2;
     double duration;
     int n_bytes;
     int *n_matches;
 
-    printf("%d\n", argc);
     /* Check number of arguments */
     if (argc < 4) {
         printf("Usage: %s approximation_factor "
                "dna_database pattern1 pattern2 ...\n",
                argv[0]);
-        return 1;
+        return 1.0;
     }
 
     MPI_Init(&argc, &argv);
@@ -332,7 +330,7 @@ int mpi_omp_data_split(int argc, char **argv) {
         fprintf(stderr,
                 "Unable to allocate array of pattern of size %d\n",
                 nb_patterns);
-        return 1;
+        return 1.0;
     }
 
     /* len of the longest pattern */
@@ -346,13 +344,13 @@ int mpi_omp_data_split(int argc, char **argv) {
         maxLen = max(maxLen, l);
         if (l <= 0) {
             fprintf(stderr, "Error while parsing argument %d\n", i + 3);
-            return 1;
+            return 1.0;
         }
 
         pattern[i] = (char *) malloc((l + 1) * sizeof(char));
         if (pattern[i] == NULL) {
             fprintf(stderr, "Unable to allocate string of size %d\n", l);
-            return 1;
+            return 1.0;
         }
 
         strncpy(pattern[i], argv[i + 3], (l + 1));
@@ -371,7 +369,7 @@ int mpi_omp_data_split(int argc, char **argv) {
     buf = read_input_file(filename, &n_bytes);
     if (buf == NULL) {
         MPI_Abort(MPI_COMM_WORLD, 0);
-        return 1;
+        return 1.0;
     }
 
     int rkMax = min(n, n_bytes) - 1;
@@ -386,67 +384,60 @@ int mpi_omp_data_split(int argc, char **argv) {
     if (rk == rkMax) {
         end_check = n_bytes;
     }
-    /* Create communicator */
-    /*
-    int color = (rk < n_bytes);
-    int newN, newRk;
 
-
-    MPI_Comm MPI_COMM_NEW;
-    MPI_Comm_split(MPI_COMM_WORLD, color, rk, &MPI_COMM_NEW);
-    MPI_Comm_size(MPI_COMM_NEW, &newN);
-    MPI_Comm_size(MPI_COMM_NEW, &newRk);
-*/
     int *n_matches_loc = (int *) malloc((nb_patterns) * sizeof(int));
+
     /*****
      * BEGIN MAIN LOOP
      ******/
     if (rk <= rkMax) {
         /* Check each pattern one by one */
+#pragma omp parallel default(shared)
+        {
+#pragma omp for schedule (static)
+            for (i = 0; i < nb_patterns; i++) {
+                int size_pattern = strlen(pattern[i]);
+                int *column;
+                int j;
 
-#pragma omp parallel default(shared) {
+                /* Initialize the number of matches to 0 */
+                n_matches_loc[i] = 0;
 
-        #pragma omp for schedule (static)
-        for (i = 0; i < nb_patterns; i++) {
-            int size_pattern = strlen(pattern[i]);
-            int *column;
+                column = (int *) malloc((size_pattern + 1) * sizeof(int));
+                if (column == NULL) {
+                    fprintf(stderr, "Error: unable to allocate memory for column (%ldB)\n",
+                            (size_pattern + 1) * sizeof(int));
+                    //return 1; <- need to handle that!
+                }
 
-            /* Initialize the number of matches to 0 */
-            n_matches_loc[i] = 0;
-
-            column = (int *) malloc((size_pattern + 1) * sizeof(int));
-            if (column == NULL) {
-                fprintf(stderr, "Error: unable to allocate memory for column (%ldB)\n",
-                        (size_pattern + 1) * sizeof(int));
-                return 1;
-            }
-
-            /* Traverse the input data up to the end of the file */
-            for (j = start_check; j < end_check; j++) {
-                int distance = 0;
-                int size;
+                /* Traverse the input data up to the end of the file */
+                for (j = start_check; j < end_check; j++) {
+                    int distance = 0;
+                    int size = size_pattern;
 
 #if APM_DEBUG
-                if ( j % 100 == 0 )
+                    if ( j % 100 == 0 )
             {
             printf( "Procesing byte %d (out of %d)\n", j, n_bytes ) ;
             }
 #endif
 
-                size = size_pattern;
-                if (n_bytes - j < size_pattern) {
-                    size = n_bytes - j;
-                }
+                    if (n_bytes - j < size_pattern) {
+                        size = n_bytes - j;
+                    }
 
-                distance = levenshtein(pattern[i], &buf[j], size, column);
+                    distance = levenshtein(pattern[i], &buf[j], size, column);
 
-                if (distance <= approx_factor) {
-                    n_matches_loc[i]++;
+                    if (distance <= approx_factor) {
+                        n_matches_loc[i]++;
+                    }
                 }
+                //printf ("Pattern %s handled by thread %d/%d of the #%d process out of %d: %d\n", pattern[i], omp_get_thread_num(), omp_get_num_threads(), rk, n, n_matches_loc[i]);
+                free(column);
             }
-            free(column);
         }
-    }
+
+
         /*****
         * END MAIN LOOP
         ******/
@@ -471,11 +462,11 @@ int mpi_omp_data_split(int argc, char **argv) {
 
 
     }
-
-    return 0;
+    MPI_Finalize();
+    return duration;
 }
 
-int mpi_pattern_split ( int argc, char ** argv )
+double mpi_pattern_split ( int argc, char ** argv )
 {
 
     MPI_Init(&argc, &argv);
@@ -501,7 +492,7 @@ int mpi_pattern_split ( int argc, char ** argv )
         printf( "Usage: %s approximation_factor "
                 "dna_database pattern1 pattern2 ...\n",
                 argv[0] ) ;
-        return 1 ;
+        return 1.0 ;
     }
 
     /* Get the distance factor */
@@ -525,7 +516,7 @@ int mpi_pattern_split ( int argc, char ** argv )
             fprintf( stderr,
                      "Unable to allocate array of pattern of size %d\n",
                      countData ) ;
-            return 1 ;
+            return 1.0 ;
         }
     }
     else {
@@ -536,7 +527,7 @@ int mpi_pattern_split ( int argc, char ** argv )
             fprintf( stderr,
                      "Unable to allocate array of pattern of size %d\n",
                      countData+1 ) ;
-            return 1 ;
+            return 1.0 ;
         }
     }
 
@@ -559,7 +550,7 @@ int mpi_pattern_split ( int argc, char ** argv )
             if ( pattern[i/comm_size] == NULL )
             {
                 fprintf( stderr, "Unable to allocate string of size %d\n", l ) ;
-                return 1 ;
+                return 1.0;
             }
 
             strncpy( pattern[i/comm_size], argv[i+3], (l+1) ) ;
@@ -574,7 +565,7 @@ int mpi_pattern_split ( int argc, char ** argv )
     buf = read_input_file( filename, &n_bytes ) ;
     if ( buf == NULL )
     {
-        return 1 ;
+        return 1.0 ;
     }
 
     /* Allocate the array of matches */
@@ -584,7 +575,7 @@ int mpi_pattern_split ( int argc, char ** argv )
         {
             fprintf( stderr, "Error: unable to allocate memory for %ldB\n",
                      countData * sizeof( int ) ) ;
-            return 1 ;
+            return 1.0 ;
         }
     }
     else {
@@ -593,7 +584,7 @@ int mpi_pattern_split ( int argc, char ** argv )
         {
             fprintf( stderr, "Error: unable to allocate memory for %ldB\n",
                      (countData+1) * sizeof( int ) ) ;
-            return 1 ;
+            return 1.0 ;
         }
     }
 
@@ -617,7 +608,7 @@ int mpi_pattern_split ( int argc, char ** argv )
         {
             fprintf( stderr, "Error: unable to allocate memory for column (%ldB)\n",
                      (size_pattern+1) * sizeof( int ) ) ;
-            return 1 ;
+            return 1.0 ;
         }
 
         /* Traverse the input data up to the end of the file */
@@ -701,15 +692,185 @@ int mpi_pattern_split ( int argc, char ** argv )
      ******/
 
     MPI_Finalize();
-    return 0 ;
+    return duration ;
+}
+
+double 
+sequential( int argc, char ** argv )
+{
+  char ** pattern ;
+  char * filename ;
+  int approx_factor = 0 ;
+  int nb_patterns = 0 ;
+  int i, j ;
+  char * buf ;
+  struct timeval t1, t2;
+  double duration ;
+  int n_bytes ;
+  int * n_matches ;
+
+  /* Check number of arguments */
+  if ( argc < 4 ) 
+  {
+    printf( "Usage: %s approximation_factor "
+            "dna_database pattern1 pattern2 ...\n", 
+            argv[0] ) ;
+    return 1. ;
+  }
+
+  /* Get the distance factor */
+  approx_factor = atoi( argv[1] ) ;
+
+  /* Grab the filename containing the target text */
+  filename = argv[2] ;
+
+  /* Get the number of patterns that the user wants to search for */
+  nb_patterns = argc - 3 ;
+
+  /* Fill the pattern array */
+  pattern = (char **)malloc( nb_patterns * sizeof( char * ) ) ;
+  if ( pattern == NULL ) 
+  {
+      fprintf( stderr, 
+              "Unable to allocate array of pattern of size %d\n", 
+              nb_patterns ) ;
+      return 1. ;
+  }
+
+  /* Grab the patterns */
+  for ( i = 0 ; i < nb_patterns ; i++ ) 
+  {
+      int l ;
+
+      l = strlen(argv[i+3]) ;
+      if ( l <= 0 ) 
+      {
+          fprintf( stderr, "Error while parsing argument %d\n", i+3 ) ;
+          return 1. ;
+      }
+
+      pattern[i] = (char *)malloc( (l+1) * sizeof( char ) ) ;
+      if ( pattern[i] == NULL ) 
+      {
+          fprintf( stderr, "Unable to allocate string of size %d\n", l ) ;
+          return 1. ;
+      }
+
+      strncpy( pattern[i], argv[i+3], (l+1) ) ;
+  }
+
+
+  printf("Approximate Pattern Mathing: "
+               "looking for %d pattern(s) in file %s w/ distance of %d (function called: sequential)\n",
+               nb_patterns, filename, approx_factor);
+
+  buf = read_input_file( filename, &n_bytes ) ;
+  if ( buf == NULL )
+  {
+      return 1. ;
+  }
+
+  /* Allocate the array of matches */
+  n_matches = (int *)malloc( nb_patterns * sizeof( int ) ) ;
+  if ( n_matches == NULL )
+  {
+      fprintf( stderr, "Error: unable to allocate memory for %ldB\n",
+              nb_patterns * sizeof( int ) ) ;
+      return 1. ;
+  }
+
+  /*****
+   * BEGIN MAIN LOOP
+   ******/
+
+  /* Timer start */
+  gettimeofday(&t1, NULL);
+
+  /* Check each pattern one by one */
+  for ( i = 0 ; i < nb_patterns ; i++ )
+  {
+      int size_pattern = strlen(pattern[i]) ;
+      int * column ;
+
+      /* Initialize the number of matches to 0 */
+      n_matches[i] = 0 ;
+
+      column = (int *)malloc( (size_pattern+1) * sizeof( int ) ) ;
+      if ( column == NULL ) 
+      {
+          fprintf( stderr, "Error: unable to allocate memory for column (%ldB)\n",
+                  (size_pattern+1) * sizeof( int ) ) ;
+          return 1. ;
+      }
+
+      /* Traverse the input data up to the end of the file */
+      for ( j = 0 ; j < n_bytes ; j++ ) 
+      {
+          int distance = 0 ;
+          int size ;
+
+#if APM_DEBUG
+          if ( j % 100 == 0 )
+          {
+          printf( "Procesing byte %d (out of %d)\n", j, n_bytes ) ;
+          }
+#endif
+
+          size = size_pattern ;
+          if ( n_bytes - j < size_pattern )
+          {
+              size = n_bytes - j ;
+          }
+
+          distance = levenshtein( pattern[i], &buf[j], size, column ) ;
+
+          if ( distance <= approx_factor ) {
+              n_matches[i]++ ;
+          }
+      }
+
+      free( column );
+  }
+
+  /* Timer stop */
+  gettimeofday(&t2, NULL);
+
+  duration = (t2.tv_sec -t1.tv_sec)+((t2.tv_usec-t1.tv_usec)/1e6);
+
+  printf( "APM done in %lf s\n", duration ) ;
+
+  /*****
+   * END MAIN LOOP
+   ******/
+
+  for ( i = 0 ; i < nb_patterns ; i++ )
+  {
+      printf( "Number of matches for pattern <%s>: %d\n", 
+              pattern[i], n_matches[i] ) ;
+  }
+
+  return duration ;
 }
 
 int main( int argc, char ** argv ) {
 
-    mpi_data_split(argc, argv);
+    double duration_sequential = sequential(argc, argv);
 
-    mpi_omp_data_split(argc, argv);
+    //double duration_mpi_data_split = mpi_data_split(argc, argv);
 
-    //mpi_pattern_split(argc, argv);
+    double duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv);
+
+    //double duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
+
+    char* file = "testsResults/new.txt";
+
+    // A MODIFIER POUR INCLURE LES PARAMETRES DANS LE NOM (n, N, patterns, database)
+
+    FILE* fp = fopen(file, "wt");
+    fprintf(fp, "%f\n", duration_sequential);
+    //fprintf(fp, "%f\n", duration_mpi_data_split);
+    fprintf(fp, "%f\n", duration_mpi_omp_data_split);
+    //fprintf(fp, "%f\n", duration_mpi_pattern_split);
+    fclose(fp);
 
 }
