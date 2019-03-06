@@ -856,9 +856,9 @@ int main( int argc, char ** argv ) {
 
     double duration_sequential = sequential(argc, argv);
 
-    double duration_mpi_data_split = mpi_data_split(argc, argv);
+    //double duration_mpi_data_split = mpi_data_split(argc, argv);
 
-    //double duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv);
+    double duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv);
 
     //double duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
 
@@ -866,11 +866,11 @@ int main( int argc, char ** argv ) {
 
     // A MODIFIER POUR INCLURE LES PARAMETRES DANS LE NOM (n, N, patterns, database)
 
-    FILE* fp = fopen(file, "w");
-    fprintf(fp, "%f ", duration_sequential);
-    fprintf(fp, "%f ", duration_mpi_data_split);
-    //fprintf(fp, "%f ", duration_mpi_omp_data_split);
-    //fprintf(fp, "%f", duration_mpi_pattern_split);
+    FILE* fp = fopen(file, "wt");
+    fprintf(fp, "%f\n", duration_sequential);
+    //fprintf(fp, "%f\n", duration_mpi_data_split);
+    fprintf(fp, "%f\n", duration_mpi_omp_data_split);
+    //fprintf(fp, "%f\n", duration_mpi_pattern_split);
     fclose(fp);
 
 }
