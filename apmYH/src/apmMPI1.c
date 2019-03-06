@@ -148,11 +148,12 @@ main( int argc, char ** argv )
 
   /* Get the number of patterns that the user wants to search for */
   nb_patterns = argc - 3 ;
-  int modulo = comm_size%nb_patterns;
-  int countData = comm_size/nb_patterns; 
+  int modulo = nb_patterns%comm_size;
+  int countData = nb_patterns/comm_size; 
   int nb_patterns_rank;
   
   /* Fill the pattern array */
+
   if (my_rank>=modulo) {
     pattern = (char **)malloc( countData * sizeof( char * ) ) ;
     nb_patterns_rank = countData;
@@ -288,8 +289,10 @@ main( int argc, char ** argv )
 
   if (my_rank>0){
     int j;
-    for (j = 0 ; j < nb_patterns_rank ; j++){
-      MPI_Send(n_matches_rank[j], 1, MPI_INT, 0, j, MPI_COMM_WORLD);
+    for (j = 0 ; j < nb_patterns_rank ; j++){    
+        MPI_Request req;
+        MPI_Status sta;
+        MPI_Isend(n_matches_rank+j, 1, MPI_INT, 0, j, MPI_COMM_WORLD, &req);
     }
     
   }
@@ -297,6 +300,35 @@ main( int argc, char ** argv )
   else{
      /* Timer start */
     gettimeofday(&t1, NULL);
+    char ** all_patterns;
+      all_patterns = (char **)malloc( nb_patterns * sizeof( char * ) ) ;
+      if ( all_patterns == NULL ) 
+    {
+      fprintf( stderr, 
+              "Unable to allocate array of pattern of size %d\n", 
+              nb_patterns ) ;
+      return 1 ;
+    }
+
+    for ( i = 0 ; i < nb_patterns ; i++ ) 
+  {
+    int l ;
+    l = strlen(argv[i+3]) ;
+    if ( l <= 0 ) 
+    {
+        fprintf( stderr, "Error while parsing argument %d\n", i+3 ) ;
+        return 1 ;
+    }
+
+    all_patterns[i] = (char *)malloc( (l+1) * sizeof( char ) ) ;
+    if ( all_patterns[i] == NULL ) 
+    {
+        fprintf( stderr, "Unable to allocate string of size %d\n", l ) ;
+        return 1 ;
+    }
+
+    strncpy( all_patterns[i], argv[i+3], (l+1) ) ;
+  }
 
     int * n_matches ;
     n_matches = (int *)malloc( nb_patterns * sizeof( int ) );
@@ -309,15 +341,21 @@ main( int argc, char ** argv )
       else {
 	limit = countData + 1;
       }
+
       int j;
-      for (j = 0 ; j < limit ; j++){
-	MPI_Status sta;
-	MPI_Recv(n_matches[j*comm_size+sender], 1, MPI_INT, sender, j, MPI_COMM_WORLD, &sta);
-      }
+      for (j = 0 ; j <= limit ; j++){
+        MPI_Request req;
+        MPI_Status sta;
+        printf("before %d \n", n_matches[j*comm_size+sender]);
+	    MPI_Irecv(n_matches+j*comm_size+sender, 1, MPI_INT, sender, j, MPI_COMM_WORLD, &req);
+        MPI_Wait(&req, &sta);
+        printf("after %d\n", n_matches[j*comm_size+sender]);
+    }
+    
     }
       
     for (j = 0 ; j < nb_patterns_rank ; j++){
-      n_matches[comm_size*j] = n_matches_rank[j];
+        n_matches[comm_size*j] = n_matches_rank[j];
     }
     
     /* Timer stop */
@@ -325,9 +363,9 @@ main( int argc, char ** argv )
     duration = (t2.tv_sec -t1.tv_sec)+((t2.tv_usec-t1.tv_usec)/1e6);
     printf( "APM done in %lf s\n", duration ) ;
     
-    for ( i = 0 ; i < nb_patterns_rank ; i++ ) {
+    for ( i = 0 ; i < nb_patterns ; i++ ) {
       printf( "Number of matches for pattern <%s>: %d\n", 
-              pattern[i], n_matches[i] ) ;
+              all_patterns[i], n_matches[i] ) ;
     }
     
   }

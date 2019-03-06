@@ -9,7 +9,7 @@ nodes=(1 2)
 
 for n in ${cores[@]}; do
     for N in ${nodes[@]}; do
-        mpirun -n $n -N $N ./apm 0 dna_database "AAG" "AGG"
+        salloc -n $n -N $N ./apm 0 dna_database "A" "A" "A" "A"
     done
 
 done
