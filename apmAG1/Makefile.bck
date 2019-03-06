@@ -3,7 +3,7 @@ HEADER_DIR=include
 OBJ_DIR=obj
 
 CC=mpicc
-CFLAGS=-O3 -I$(HEADER_DIR) -Wall -fopenmp
+CFLAGS=-O3 -I$(HEADER_DIR) -Wall
 LDFLAGS=
 
 SRC= apmAG1.c
