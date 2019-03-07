@@ -9,9 +9,8 @@ nodes=(1 2)
 
 for n in ${cores[@]}; do
     for N in ${nodes[@]}; do
-        salloc -n $n -N $N ./apm 0 dna_database "A" "A" "A" "A"
+        salloc -n $n -N $N mpirun ./apm 0  dna/chr1_136K_alt.fa AGTT AT AGTT AGTGTGT AGTCTC ACCCCCTG CCCCAT
     done
-
 done
 
 
