@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
-cores=(1 2 4)
-nodes=(1 2)
+cores=(1 2 4 10 20)
+nodes=(1 2 5 10)
 
 #A MODIFIER
 #FAIRE UNE LISTE DE PATTERNS A PARCOURIR

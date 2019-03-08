@@ -697,7 +697,7 @@ double sequential(int argc, char **argv, int *n_bytes_copy) {
            nb_patterns, filename, approx_factor);
 
     buf = read_input_file(filename, &n_bytes);
-    *n_bytes_copy = n_bytes; 
+    *n_bytes_copy = n_bytes;
     if (buf == NULL) {
         return 1.;
     }
@@ -778,6 +778,41 @@ double sequential(int argc, char **argv, int *n_bytes_copy) {
     return duration;
 }
 
+int get_N(int n, char* hostnames, int* lens, int* displs, int sum_lens) {
+    char* hostnames_dico = (char*) malloc(sum_lens);
+    int lens_dico[n], displs_dico[n];
+    hostnames_dico = hostnames;
+    lens_dico[0] = lens[0];
+    displs_dico[0] = 0;
+    int dico_size = 1;
+    int i, j, k;
+    for (i = 1; i < n; i++) {
+        int new_name = 1;
+        for (j = 0; j < dico_size; j++) {
+            if (lens_dico[j] != lens[i]) continue;
+            int same_name = 1;
+            for (k = 0; k < lens[i]; k++) {
+                if (hostnames_dico[displs_dico[j] + k] != hostnames[displs[i] + k]) {
+                    same_name = 0;
+                    break;
+                }
+            }
+            if (same_name) {
+                new_name = 0;
+                break;
+            }
+        }
+        if (new_name) {
+            lens_dico[dico_size] = lens[i];
+            displs_dico[dico_size] = displs_dico[dico_size-1] + lens_dico[dico_size-1];
+            strncpy (hostnames_dico + displs_dico[dico_size], hostnames + displs[i], lens[i]);
+            dico_size += 1;
+        }
+    }
+
+    return dico_size;
+}
+
 int main(int argc, char **argv) {
 
     MPI_Init(&argc, &argv);
@@ -801,14 +836,42 @@ int main(int argc, char **argv) {
 
     //double duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
 
+    //get number of Nodes
+    int len;
+    char name[MPI_MAX_PROCESSOR_NAME];
+    MPI_Get_processor_name(name, &len);
+
+    int lens[n];
+    int displs[n];
+    int sum_lens;
+    char* hostnames;
+    if (rk==0) {
+        MPI_Gather(&len, 1, MPI_INT, lens, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&len, &sum_lens, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+        hostnames = (char*) malloc(sum_lens);
+        displs[0] = 0;
+        int i;
+        for (i = 1; i < n; i++) {
+            displs[i] = displs[i-1] + lens[i-1];
+        }
+        MPI_Gatherv(name, len, MPI_CHAR, hostnames, lens, displs, MPI_CHAR, 0, MPI_COMM_WORLD);
+    }
+    else {
+        MPI_Gather(&len, 1, MPI_INT, lens, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&len, &sum_lens, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(name, len, MPI_CHAR, hostnames, lens, displs, MPI_CHAR, 0, MPI_COMM_WORLD);
+    }
+
     if (rk == 0) {
+        // Get value of N
+        int N = get_N(n, hostnames, lens, displs, sum_lens);
+
+
         int n_bytes;
         double duration_sequential = sequential(argc, argv, &n_bytes);
 
-        // A MODIFIER POUR INCLURE LES PARAMETRES DANS LE NOM (n, N, patterns, database)
-
-        char filename[1000];
-        sprintf(filename, "testsResults/%d %d %d.txt", n, n_bytes, argc - 3); //(n, nb patterns)
+        char filename[200];
+        sprintf(filename, "testsResults/%d %d %d %d.txt", n, N, n_bytes, argc - 3); //(n, N, size of dna, nb patterns)
 
         FILE *fp = fopen(filename, "wt");
         fprintf(fp, "sequential %f\n", duration_sequential);
@@ -817,5 +880,7 @@ int main(int argc, char **argv) {
         //fprintf(fp, "%f\n", duration_mpi_pattern_split);
         fclose(fp);
     }
+
+    MPI_Finalize();
 
 }
