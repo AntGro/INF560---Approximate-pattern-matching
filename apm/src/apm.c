@@ -930,7 +930,7 @@ int main(int argc, char **argv) {
         fprintf(fp, "sequential %f\n", duration_sequential);
         fprintf(fp, "mpi_data_split %f\n", duration_mpi_data_split);
         fprintf(fp, "mpi_omp_data_split %f\n", duration_mpi_omp_data_split);
-        fprintf(fp, "%f\n", duration_mpi_pattern_split);
+        fprintf(fp, "mpi_pattern_split %f\n", duration_mpi_pattern_split);
         fclose(fp);
     }
 
