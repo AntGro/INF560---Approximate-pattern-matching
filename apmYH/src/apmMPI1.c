@@ -345,7 +345,7 @@ main( int argc, char ** argv )
             }
 
             int j;
-            for (j = 0 ; j <= limit ; j++){
+            for (j = 0 ; j < limit ; j++){
                 MPI_Request req;
                 MPI_Status sta;
                 printf("before %d \n", n_matches[j*comm_size+sender]);
