@@ -1,0 +1,4 @@
+sequential 0.000011
+mpi_data_split 0.007990
+mpi_omp_data_split 0.110989
+mpi_pattern_split 0.000013
