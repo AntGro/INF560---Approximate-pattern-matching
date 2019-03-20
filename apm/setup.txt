@@ -1,0 +1,11 @@
+cd INF/INF560/
+source set_env.sh
+
+%=== Generate executable ===%
+make
+
+%=== Run apm with mpi and openmp ===%
+salloc -n 4 -N 2 mpirun ./apm 1 dna/chr1_136K_alt.fa AGTT AT AGTT AGTGTGT AGTCTC ACCCCCTG CCCCAT
+
+%=== Run bash ===%
+bash bashfile

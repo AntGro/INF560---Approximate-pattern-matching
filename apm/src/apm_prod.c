@@ -12,8 +12,6 @@
 #include <mpi.h>
 #include <omp.h>
 
-#include "cuda.h"
-
 #define APM_DEBUG 0
 
 char *
@@ -428,7 +426,12 @@ double mpi_omp_data_split(int argc, char **argv, int n, int rk) {
     return duration;
 }
 
-double mpi_pattern_split(int argc, char **argv, int comm_size, int my_rank) {
+double mpi_pattern_split(int argc, char **argv) {
+
+    int my_rank;
+    MPI_Comm_rank (MPI_COMM_WORLD, &my_rank);
+    int comm_size;
+    MPI_Comm_size (MPI_COMM_WORLD, &comm_size);
 
     char ** pattern ;
     char * filename ;
@@ -607,8 +610,8 @@ double mpi_pattern_split(int argc, char **argv, int comm_size, int my_rank) {
     else{
         /* Timer start */
         printf("Approximate Pattern Mathing: "
-               "looking for %d pattern(s) in file %s w/ distance of %d (function called: mpi_pattern_split)\n",
-               nb_patterns, filename, approx_factor);
+           "looking for %d pattern(s) in file %s w/ distance of %d (function called: mpi_pattern_split)\n",
+           nb_patterns, filename, approx_factor);
         char ** all_patterns;
         all_patterns = (char **)malloc( nb_patterns * sizeof( char * ) ) ;
         if ( all_patterns == NULL )
@@ -683,115 +686,6 @@ double mpi_pattern_split(int argc, char **argv, int comm_size, int my_rank) {
 
     return duration ;
 }
-
-
-double gpu(int argc, char **argv) {
-    char ** pattern ;
-    char * filename ;
-    int approx_factor = 0 ;
-    int nb_patterns = 0 ;
-    int i, j ;
-    char * buf ;
-    struct timeval t1, t2;
-    double duration ;
-    int n_bytes ;
-    int *n_matches;
-
-
-    /* Get the distance factor */
-    approx_factor = atoi( argv[1] ) ;
-
-    /* Grab the filename containing the target text */
-    filename = argv[2] ;
-
-    /* Get the number of patterns that the user wants to search for */
-    nb_patterns = argc - 3 ;
-
-    /* Fill the pattern array */
-    pattern = (char **)malloc( nb_patterns * sizeof( char * ) ) ;
-    if ( pattern == NULL )
-    {
-        fprintf( stderr,
-                 "Unable to allocate array of pattern of size %d\n",
-                 nb_patterns ) ;
-        return 1 ;
-    }
-
-    /* Grab the patterns */
-    for ( i = 0 ; i < nb_patterns ; i++ )
-    {
-        int l ;
-
-        l = strlen(argv[i+3]) ;
-        if ( l <= 0 )
-        {
-            fprintf( stderr, "Error while parsing argument %d\n", i+3 ) ;
-            return 1 ;
-        }
-
-        pattern[i] = (char *)malloc( (l+1) * sizeof( char ) ) ;
-        if ( pattern[i] == NULL )
-        {
-            fprintf( stderr, "Unable to allocate string of size %d\n", l ) ;
-            return 1 ;
-        }
-
-        strncpy( pattern[i], argv[i+3], (l+1) ) ;
-    }
-
-
-    printf("Approximate Pattern Mathing: "
-           "looking for %d pattern(s) in file %s w/ distance of %d (function called: gpu)\n",
-           nb_patterns, filename, approx_factor);
-
-    buf = read_input_file( filename, &n_bytes ) ;
-    if ( buf == NULL )
-    {
-        return 1 ;
-    }
-
-    /* Allocate the array of matches */
-    n_matches = (int *)malloc( nb_patterns * sizeof( int ) ) ;
-    for (i = 0; i < nb_patterns; i++) {
-        n_matches[i] = 0;
-    }
-
-    if ( n_matches == NULL )
-    {
-        fprintf( stderr, "Error: unable to allocate memory for %ldB\n",
-                 nb_patterns * sizeof( int ) ) ;
-        return 1 ;
-    }
-
-    /*****
-     * BEGIN MAIN LOOP
-     ******/
-
-    /* Timer start */
-    gettimeofday(&t1, NULL);
-
-    gpu_find_matches (nb_patterns, pattern, buf, n_bytes, n_matches, approx_factor);
-
-    /* Timer stop */
-    gettimeofday(&t2, NULL);
-
-    duration = (t2.tv_sec -t1.tv_sec)+((t2.tv_usec-t1.tv_usec)/1e6);
-
-    printf( "APM done in %lf s\n", duration ) ;
-
-    /*****
-     * END MAIN LOOP
-     ******/
-
-    for ( i = 0 ; i < nb_patterns ; i++ )
-    {
-        printf( "Number of matches for pattern <%s>: %d\n",
-                pattern[i], n_matches[i] ) ;
-    }
-
-    return duration ;
-}
-
 
 double sequential(int argc, char **argv, int *n_bytes_copy) {
     char **pattern;
@@ -993,7 +887,7 @@ int main(int argc, char **argv) {
 
     double duration_mpi_omp_data_split = mpi_omp_data_split(argc, argv, n, rk);
 
-    double duration_mpi_pattern_split = mpi_pattern_split(argc, argv, n, rk);
+    double duration_mpi_pattern_split = mpi_pattern_split(argc, argv);
 
     //get number of Nodes
     int len;
@@ -1027,7 +921,6 @@ int main(int argc, char **argv) {
 
 
         int n_bytes;
-        double duration_gpu = gpu(argc, argv);
         double duration_sequential = sequential(argc, argv, &n_bytes);
 
         char filename[200];
@@ -1038,7 +931,6 @@ int main(int argc, char **argv) {
         fprintf(fp, "mpi_data_split %f\n", duration_mpi_data_split);
         fprintf(fp, "mpi_omp_data_split %f\n", duration_mpi_omp_data_split);
         fprintf(fp, "mpi_pattern_split %f\n", duration_mpi_pattern_split);
-        fprintf(fp, "gpu %f\n", duration_gpu);
         fclose(fp);
     }
 
