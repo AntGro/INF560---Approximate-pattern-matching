@@ -1,0 +1,4 @@
+nvcc -I. -o apmGPU apmGPU.cu
+./apmGPU 0 ../dna/chr1_293K_alt.fa A
+
+salloc -n 20 -N 10 mpirun ./apm 3 dna/chr1_136K_alt.fa AGTGT ACGTGT

@@ -82,9 +82,9 @@
  
  #define MIN3(a, b, c) ((a) < (b) ? ((a) < (c) ? (a) : (c)) : ((b) < (c) ? (b) : (c)))
  
- int levenshtein(char *s1, char *s2, int len, int * column) {
+ __host__ __device__ int levenshtein(char *s1, char *s2, int len, int * column) {
      unsigned int x, y, lastdiag, olddiag;
- 
+
      for (y = 1; y <= len; y++)
      {
          column[y] = y;
@@ -106,53 +106,31 @@
      return(column[len]);
  }
 
- __global__ void matchesKernel(int* d_n_matches, char ** d_pattern, int nb_patterns, int n_bytes, int approx_factor){
+ __global__ void matchesKernel(int* d_n_matches, char * d_buf, char * d_pattern, int i, int size_pattern, int offset, int n_bytes, int approx_factor){
     
-    for ( i = 0 ; i < nb_patterns ; i++ ){
-        int size_pattern = strlen(d_pattern[i]) ;
-        int * column ;
-  
-        /* Initialize the number of matches to 0 */
-        d_n_matches[i] = 0 ;
-  
-        column = (int *)malloc( (size_pattern+1) * sizeof( int ) ) ;
-        if ( column == NULL ) 
-        {
-            fprintf( stderr, "Error: unable to allocate memory for column (%ldB)\n",
-                    (size_pattern+1) * sizeof( int ) ) ;
-            return 1 ;
-        }
-  
-        /* Traverse the input data up to the end of the file */
-        for ( j = 0 ; j < n_bytes ; j++ ) 
-        {
-            int distance = 0 ;
-            int size ;
-  
-  #if APM_DEBUG
-            if ( j % 100 == 0 )
-            {
-            printf( "Procesing byte %d (out of %d)\n", j, n_bytes ) ;
-            }
-  #endif
-  
-            size = size_pattern ;
-            if ( n_bytes - j < size_pattern )
-            {
-                size = n_bytes - j ;
-            }
-  
-            distance = levenshtein( d_pattern[i], &d_buf[j], size, column ) ;
-  
-            if ( distance <= approx_factor ) {
-                d_n_matches[i]++ ;
-            }
-        }
-  
-        free( column );
-    }
+    /* Traverse the input data up to the end of the file */
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    int distance = 0 ;
+    int size ;
 
-   }
+    size = size_pattern ;
+    int* columns = (int *) malloc((size_pattern + 1) * sizeof(int));
+    while (j < n_bytes) {
+        if (n_bytes - j < size_pattern ){
+            size = n_bytes - j ;
+        }
+
+        distance = levenshtein(d_pattern + offset, &d_buf[j], size, columns ) ;
+        if ( distance <= approx_factor) {
+            atomicAdd(&d_n_matches[i], 1);
+        }
+
+        j += stride;
+    }
+    free(columns);
+    
+}
  
  int 
  main( int argc, char ** argv )
@@ -161,7 +139,7 @@
    char * filename ;
    int approx_factor = 0 ;
    int nb_patterns = 0 ;
-   int i, j ;
+   int i;
    char * buf ;
    struct timeval t1, t2;
    double duration ;
@@ -231,6 +209,10 @@
  
    /* Allocate the array of matches */
    n_matches = (int *)malloc( nb_patterns * sizeof( int ) ) ;
+   for (i = 0; i < nb_patterns; i++) {
+        n_matches[i] = 0;
+   }
+
    if ( n_matches == NULL )
    {
        fprintf( stderr, "Error: unable to allocate memory for %ldB\n",
@@ -247,19 +229,41 @@
  
    /* Check each pattern one by one */
    int* d_n_matches;
-   char ** d_pattern;
+   char * d_pattern;
    char* d_buf;
-   cudaMalloc((void **)&d_n_matches, nb_patterns*sizeof(int));
-   cudaMalloc((void **)&d_pattern, nb_patterns*sizeof(char*));
-   cudaMalloc((void **)&d_buf, n_bytes);
-   cudaMemcpy(d_pattern, pattern, nb_patterns*sizeof(char*), cudaMemcpyHostToDevice);
-   cudaMemcpy(d_buf, buf, n_bytes, cudaMemcpyHostToDevice);
+   int* offset = (int *)malloc( nb_patterns * sizeof( int ) ) ;
+   int* lens = (int *)malloc( nb_patterns * sizeof( int ) ) ;
+   int sum_lens;
+   lens[0] = strlen(pattern[0]);
+   offset[0] = 0;
+   sum_lens = lens[0];
+   for (i = 1; i < nb_patterns; i++) {
+       offset[i] = offset[i-1] + lens[i-1];
+       lens[i] = strlen(pattern[i]);
+       sum_lens += lens[i];
+   }
+   char* concat_patterns = (char*) malloc( sum_lens * sizeof( char ) ) ;
+   for (i = 0; i < nb_patterns; i++) {
+        strcpy (concat_patterns + offset[i], pattern[i]);
+    }
 
-   int Dg = 1;
-   int Db = 1;
-   matchesKernel<<<Dg,Db>>>(int* d_n_matches, char ** d_pattern, int nb_patterns, int n_bytes, int approx_factor);
+   cudaError_t error;
+   cudaMalloc((void **)&d_n_matches, nb_patterns*sizeof(int));
+   cudaMalloc((void **)&d_pattern, sum_lens*sizeof(char));
+   cudaMalloc((void **)&d_buf, n_bytes);
+   cudaMemcpy(d_pattern, concat_patterns, sum_lens*sizeof(char), cudaMemcpyHostToDevice);
+   cudaMemcpy(d_buf, buf, n_bytes, cudaMemcpyHostToDevice);
+   cudaMemcpy(d_n_matches, n_matches, nb_patterns*sizeof(int), cudaMemcpyHostToDevice);
+
+   int Dg = 4;
+   int Db = 256;
+   for (i = 0; i < nb_patterns; i++) {
+       matchesKernel<<<Dg,Db>>>(d_n_matches, d_buf, d_pattern, i, lens[i], offset[i], n_bytes, approx_factor);
+       cudaGetLastError();
+   } 
+   
    cudaMemcpy(n_matches, d_n_matches, nb_patterns*sizeof(int), cudaMemcpyDeviceToHost);
- 
+
    /* Timer stop */
    gettimeofday(&t2, NULL);
  
