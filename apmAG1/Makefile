@@ -6,11 +6,11 @@ CC=mpicc
 CFLAGS=-O3 -I$(HEADER_DIR) -Wall -fopenmp
 LDFLAGS=
 
-SRC= apmAG1.c
+SRC= apm.c
 
-OBJ= $(OBJ_DIR)/apmAG1.o
+OBJ= $(OBJ_DIR)/apm.o
 
-all: $(OBJ_DIR) apmAG1
+all: $(OBJ_DIR) apm
 
 $(OBJ_DIR):
 	mkdir $(OBJ_DIR)
@@ -18,8 +18,8 @@ $(OBJ_DIR):
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
-apmAG1:$(OBJ)
+apm:$(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 clean:
-	rm -f apmAG1 $(OBJ) ; rmdir $(OBJ_DIR)
+	rm -f apm $(OBJ) ; rmdir $(OBJ_DIR)

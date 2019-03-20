@@ -1,16 +1,19 @@
 SRC_DIR=src
 HEADER_DIR=include
 OBJ_DIR=obj
+OBJ_CUDA_DIR=obj_cuda
+OBJ_CPP_DIR=obj_cpp
 
 CC=mpicc
-CFLAGS=-O3 -I$(HEADER_DIR) -Wall
+CFLAGS=-O3 -I$(HEADER_DIR) -Wall -fopenmp
 LDFLAGS=
+CUDA_LINK=-L/usr/local/cuda/bin/..//lib64 -lcudadevrt -lcudart_static -lrt -lpthread -ldl
 
 SRC= apmAG1.c
 
-OBJ= $(OBJ_DIR)/apmAG1.o
+OBJ= $(OBJ_DIR)/apmAG1.o $(OBJ_CUDA_DIR)/cuda.o
 
-all: $(OBJ_DIR) apmAG1
+all: $(OBJ_DIR) $(OBJ_CUDA_DIR) apmAG1
 
 $(OBJ_DIR):
 	mkdir $(OBJ_DIR)
